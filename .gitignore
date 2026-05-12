@@ -1,0 +1,7 @@
+app/target/
+web/.next/
+web/node_modules/
+backend/__pycache__/
+**/.env
+**/.env.local
+**/.env.key
