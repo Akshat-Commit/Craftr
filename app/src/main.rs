@@ -12,6 +12,7 @@ mod api;
 mod clipboard;
 mod config;
 mod hotkeys;
+mod popup_win32;
 
 use api::PromptMode;
 use hotkeys::HotkeyAction;
@@ -22,7 +23,7 @@ use std::sync::{
 };
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
-    TrayIconBuilder,
+    TrayIconBuilder, TrayIconEvent,
 };
 use chrono::Local;
 
@@ -69,6 +70,7 @@ fn main() {
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
     let menu_receiver = MenuEvent::receiver();
+    let tray_receiver = TrayIconEvent::receiver();
 
     // Track last update time so we refresh stats regularly
     let mut last_update = std::time::Instant::now();
@@ -83,7 +85,7 @@ fn main() {
             last_update = std::time::Instant::now();
         }
 
-        if let Ok(event) = menu_receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+        if let Ok(event) = menu_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             match event.id.0.as_str() {
                 ID_UPGRADE => {
                     let _ = opener::open("https://craftr.app/upgrade");
@@ -92,6 +94,15 @@ fn main() {
                     running_clone.store(false, Ordering::Relaxed);
                 }
                 _ => {}
+            }
+        }
+
+        if let Ok(event) = tray_receiver.try_recv() {
+            if let TrayIconEvent::Click { button: tray_icon::MouseButton::Left, .. } = event {
+                // Spawn pure Win32 borderless window
+                std::thread::spawn(|| {
+                    popup_win32::show_popup();
+                });
             }
         }
 

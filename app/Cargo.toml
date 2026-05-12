@@ -30,7 +30,14 @@ winres = "0.1"
 ICON = "assets/icon.ico"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "windef"] }
+winapi = { version = "0.3", features = [
+  "winuser", 
+  "shellapi",
+  "windef",
+  "wingdi",
+  "libloaderapi",
+  "errhandlingapi"
+] }
 
 [profile.release]
 opt-level = "z"
