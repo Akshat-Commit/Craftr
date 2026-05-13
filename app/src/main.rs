@@ -31,6 +31,7 @@ const ID_UPGRADE: &str = "upgrade";
 const ID_QUIT: &str = "quit";
 
 fn main() {
+    log("App started");
     // Start global hotkey listener
     hotkeys::start_hotkey_listener(move |action| {
         let mode = match action {
@@ -58,6 +59,7 @@ fn main() {
     menu.append(&PredefinedMenuItem::separator()).ok();
     menu.append(&quit_item).ok();
 
+    log("Creating tray icon...");
     let icon = create_tray_icon();
 
     let _tray_icon = TrayIconBuilder::new()
@@ -65,7 +67,12 @@ fn main() {
         .with_tooltip("Craftr — AI Prompt Power-ups")
         .with_icon(icon)
         .build()
-        .expect("Failed to create tray icon");
+        .unwrap_or_else(|e| {
+            let err = format!("Failed to create tray icon: {:?}", e);
+            log(&err);
+            panic!("{}", err);
+        });
+    log("Tray icon created successfully");
 
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
@@ -86,6 +93,7 @@ fn main() {
         }
 
         if let Ok(event) = menu_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
+            log(&format!("Menu item clicked: {:?}", event.id.0));
             match event.id.0.as_str() {
                 ID_UPGRADE => {
                     let _ = opener::open("https://craftr.app/upgrade");
@@ -98,15 +106,32 @@ fn main() {
         }
 
         if let Ok(event) = tray_receiver.try_recv() {
-            if let TrayIconEvent::Click { button: tray_icon::MouseButton::Left, .. } = event {
-                // Spawn pure Win32 borderless window
-                std::thread::spawn(|| {
-                    popup_win32::show_popup();
-                });
+            if let TrayIconEvent::Click { button, .. } = &event {
+                if *button == tray_icon::MouseButton::Left {
+                    log("LEFT CLICK DETECTED");
+                    log("Attempting to create popup window...");
+                    // Spawn pure Win32 borderless window
+                    std::thread::spawn(|| {
+                        popup_win32::show_popup();
+                        log("Popup window created");
+                    });
+                } else if *button == tray_icon::MouseButton::Right {
+                    log("RIGHT CLICK DETECTED");
+                }
             }
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // Process Windows messages so the tray icon remains responsive
+        unsafe {
+            use winapi::um::winuser::{PeekMessageW, TranslateMessage, DispatchMessageW, MSG, PM_REMOVE};
+            let mut msg: MSG = std::mem::zeroed();
+            while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 
@@ -248,3 +273,19 @@ fn create_tray_icon() -> tray_icon::Icon {
 }
 
 use chrono::Timelike;
+
+fn log(msg: &str) {
+    use std::io::Write;
+    let base_dir = format!("{}\\Craftr", std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string()));
+    std::fs::create_dir_all(&base_dir).ok();
+    
+    let path = format!("{}\\debug.log", base_dir);
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap();
+    let time = chrono::Local::now()
+        .format("%H:%M:%S").to_string();
+    writeln!(file, "[{}] {}", time, msg).unwrap();
+}

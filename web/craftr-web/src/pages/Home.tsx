@@ -6,25 +6,8 @@ import { useDownload } from "../hooks/useDownload";
 
 export default function Home() {
   const { isMac, isWindows, triggerDownload } = useDownload();
-  const [showWinTooltip, setShowWinTooltip] = useState(false);
-  const [showMacTooltip, setShowMacTooltip] = useState(false);
-
   const handleDownloadWindows = () => {
-    if (isWindows || (!isMac && !isWindows)) {
-      triggerDownload('windows');
-    } else {
-      setShowWinTooltip(true);
-      setTimeout(() => setShowWinTooltip(false), 3000);
-    }
-  };
-
-  const handleDownloadMac = () => {
-    if (isMac) {
-      triggerDownload('macos');
-    } else {
-      setShowMacTooltip(true);
-      setTimeout(() => setShowMacTooltip(false), 3000);
-    }
+    triggerDownload('windows');
   };
 
   return (
@@ -76,43 +59,36 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mt-10 flex flex-col items-center justify-center gap-6"
           >
-            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm sm:max-w-none justify-center">
-              <div className="relative">
+            <div className="flex flex-col sm:flex-row gap-8 w-full max-w-sm sm:max-w-none justify-center items-start">
+              <div className="relative w-full sm:w-auto">
                 <button
                   onClick={handleDownloadWindows}
-                  className={`flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold transition-all hover:scale-105 cursor-pointer w-full sm:w-auto ${
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl px-8 py-3 text-sm font-bold transition-all hover:scale-105 cursor-pointer w-full sm:w-auto ${
                     isWindows || (!isMac && !isWindows)
                       ? "bg-[#AAFF00] text-black shadow-[0_0_20px_rgba(170,255,0,0.3)] opacity-100" 
                       : "bg-white/10 text-white border border-white/10 opacity-60"
                   }`}
                 >
-                  Download for Windows
+                  <span>Download for Windows</span>
+                  {isWindows && <span className="text-[10px] font-semibold opacity-80">✓ Detected: Windows</span>}
                 </button>
-                {showWinTooltip && (
-                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white text-black text-[10px] font-bold py-1 px-3 rounded shadow-xl whitespace-nowrap z-50">
-                    Switch to Windows to download Windows version
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-white" />
-                  </div>
-                )}
               </div>
 
-              <div className="relative">
+              <div className="relative flex flex-col items-center gap-3 w-full sm:w-auto">
                 <button
-                  onClick={handleDownloadMac}
-                  className={`flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold transition-all hover:scale-105 cursor-pointer w-full sm:w-auto ${
-                    isMac 
-                      ? "bg-[#AAFF00] text-black shadow-[0_0_20px_rgba(170,255,0,0.3)] opacity-100" 
-                      : "bg-white/10 text-white border border-white/10 opacity-60"
-                  }`}
+                  disabled
+                  className="flex flex-col items-center justify-center gap-1 rounded-2xl px-8 py-3 text-sm font-bold w-full sm:w-auto bg-white/5 text-zinc-500 border border-white/5 cursor-not-allowed"
                 >
-                  Download for macOS
+                  <span>macOS — Coming Soon</span>
+                  {isMac && <span className="text-[10px] font-semibold opacity-80">✓ Detected: macOS</span>}
                 </button>
-                {showMacTooltip && (
-                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white text-black text-[10px] font-bold py-1 px-3 rounded shadow-xl whitespace-nowrap z-50">
-                    Switch to macOS to download Mac version
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-white" />
-                  </div>
-                )}
+                <div className="flex w-full items-center gap-2 bg-black/40 rounded-full border border-white/10 p-1 pl-4">
+                  <span className="text-xs text-zinc-500 whitespace-nowrap">notify me &rarr;</span>
+                  <input type="email" placeholder="Email address" className="bg-transparent border-none text-xs text-white outline-none w-full placeholder:text-zinc-600" />
+                  <button className="bg-white/10 text-white rounded-full p-2 hover:bg-white/20 transition-colors">
+                    <ArrowRight size={12} />
+                  </button>
+                </div>
               </div>
             </div>
             

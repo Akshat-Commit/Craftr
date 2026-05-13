@@ -11,8 +11,8 @@ export function useDownload() {
   }, []);
 
   const downloadPaths = {
-    windows: "https://github.com/your-username/craftr-desktop/releases/latest/download/craftr-windows-x64.exe",
-    macos: "https://github.com/your-username/craftr-desktop/releases/latest/download/craftr-macos.dmg",
+    windows: "https://github.com/Akshat-Commit/Craftr/releases/download/v1.0.0/craftr-windows-x64.exe",
+    macos: "#",
   };
 
   const triggerDownload = (platform?: 'windows' | 'macos') => {

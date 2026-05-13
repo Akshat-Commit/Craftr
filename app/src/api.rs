@@ -22,16 +22,14 @@ Rules:
 - Remove ambiguity completely
 - Return ONLY the enhanced prompt, no explanation, no preamble"#;
 
-const COMPRESS_SYSTEM_PROMPT: &str = r#"You are an expert at prompt compression and token optimization.
+const COMPRESS_SYSTEM_PROMPT: &str = r#"You are a text compression engine. Your only goal is to reduce the word count of the user's text as much as possible while keeping the exact original meaning.
 
 Rules:
-- Preserve ALL key information and intent
-- Remove filler words, redundancy, unnecessary politeness
-- Use precise, direct language
-- Keep critical constraints and requirements
-- Aim for 40-60% reduction in length
-- Never remove important context
-- Return ONLY the compressed prompt, no explanation, no preamble"#;
+- DO NOT enhance, expand, or add new details to the text
+- Preserve ALL key information and intent exactly
+- Remove filler words, redundancy, and unnecessary politeness
+- Aim for maximum reduction in length without losing context
+- Return ONLY the compressed text, no explanation, no preamble"#;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PromptMode {
@@ -92,7 +90,7 @@ pub fn call_groq(text: &str, mode: PromptMode) -> Result<String, String> {
 
     let response = client
         .post(API_URL)
-        .header("Authorization", format!("Bearer {}", API_KEY))
+        .header("Authorization", format!("Bearer {}", API_KEY.trim()))
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
