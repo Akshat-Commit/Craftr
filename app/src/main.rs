@@ -13,13 +13,15 @@ mod clipboard;
 mod config;
 mod hotkeys;
 mod popup_win32;
+mod settings_win32;
+
 
 use api::PromptMode;
 use hotkeys::HotkeyAction;
 use native_dialog::{MessageDialog, MessageType};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
@@ -28,10 +30,18 @@ use tray_icon::{
 use chrono::Local;
 
 const ID_UPGRADE: &str = "upgrade";
+const ID_STARTUP: &str = "startup";
+const ID_HOTKEYS: &str = "hotkeys";
 const ID_QUIT: &str = "quit";
 
 fn main() {
     log("App started");
+    config::enforce_daily_reset();
+
+    let cfg = config::load_config();
+    let hotkeys_state = Arc::new(Mutex::new((cfg.enhance_hotkey.clone(), cfg.compress_hotkey.clone())));
+    let hotkeys_clone = hotkeys_state.clone();
+
     // Start global hotkey listener
     hotkeys::start_hotkey_listener(move |action| {
         let mode = match action {
@@ -39,7 +49,7 @@ fn main() {
             HotkeyAction::Compress => PromptMode::Compress,
         };
         process_clipboard(mode);
-    });
+    }, hotkeys_clone);
 
     // Build tray menu with dynamic stat labels
     let menu = Menu::new();
@@ -50,6 +60,14 @@ fn main() {
     let upgrade_item = MenuItem::with_id(ID_UPGRADE, "✨ Upgrade to Pro →", true, None);
     let quit_item = MenuItem::with_id(ID_QUIT, "Quit", true, None);
 
+    let cfg = config::load_config();
+    update_startup_registry(cfg.launch_at_startup);
+
+    let startup_text = if cfg.launch_at_startup { "✓ Launch at startup" } else { "Launch at startup" };
+    let startup_item = MenuItem::with_id(ID_STARTUP, startup_text, true, None);
+    let hotkeys_item = MenuItem::with_id(ID_HOTKEYS, "⌨️  Change Hotkeys →", true, None);
+
+    
     menu.append(&label_item).ok();
     menu.append(&PredefinedMenuItem::separator()).ok();
     menu.append(&usage_item).ok();
@@ -57,6 +75,8 @@ fn main() {
     menu.append(&PredefinedMenuItem::separator()).ok();
     menu.append(&upgrade_item).ok();
     menu.append(&PredefinedMenuItem::separator()).ok();
+    menu.append(&hotkeys_item).ok();
+    menu.append(&startup_item).ok();
     menu.append(&quit_item).ok();
 
     log("Creating tray icon...");
@@ -96,11 +116,29 @@ fn main() {
             log(&format!("Menu item clicked: {:?}", event.id.0));
             match event.id.0.as_str() {
                 ID_UPGRADE => {
-                    let _ = opener::open("https://craftr.app/upgrade");
+                    let _ = opener::open("https://getcraftr.vercel.app/pricing");
+                }
+                ID_HOTKEYS => {
+                    let hs_clone = hotkeys_state.clone();
+                    std::thread::spawn(move || {
+                        settings_win32::show_settings_window(hs_clone);
+                    });
+                }
+                ID_STARTUP => {
+                    let mut current_cfg = config::load_config();
+                    current_cfg.launch_at_startup = !current_cfg.launch_at_startup;
+                    if current_cfg.launch_at_startup {
+                        startup_item.set_text("✓ Launch at startup");
+                    } else {
+                        startup_item.set_text("Launch at startup");
+                    }
+                    let _ = config::save_config(&current_cfg);
+                    update_startup_registry(current_cfg.launch_at_startup);
                 }
                 ID_QUIT => {
                     running_clone.store(false, Ordering::Relaxed);
                 }
+
                 _ => {}
             }
         }
@@ -111,8 +149,9 @@ fn main() {
                     log("LEFT CLICK DETECTED");
                     log("Attempting to create popup window...");
                     // Spawn pure Win32 borderless window
-                    std::thread::spawn(|| {
-                        popup_win32::show_popup();
+                    let hs_clone = hotkeys_state.clone();
+                    std::thread::spawn(move || {
+                        popup_win32::show_popup(hs_clone);
                         log("Popup window created");
                     });
                 } else if *button == tray_icon::MouseButton::Right {
@@ -212,7 +251,7 @@ fn show_upgrade_notification() {
         .unwrap_or(false);
 
     if result {
-        let _ = opener::open("https://craftr.app/upgrade");
+        let _ = opener::open("https://getcraftr.vercel.app/pricing");
     }
 }
 
@@ -225,51 +264,13 @@ fn show_error(msg: &str) {
 }
 
 fn create_tray_icon() -> tray_icon::Icon {
-    let size = 32u32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-    let bg = (10u8, 10u8, 10u8);
-    let accent = (170u8, 255u8, 0u8);
-
-    for y in 0..size {
-        for x in 0..size {
-            let idx = ((y * size + x) * 4) as usize;
-            let cx = (x as f32 - size as f32 / 2.0) / (size as f32 / 2.0);
-            let cy = (y as f32 - size as f32 / 2.0) / (size as f32 / 2.0);
-            let dist = cx.abs().max(cy.abs());
-
-            if dist < 0.9 {
-                let is_c = (x >= 7 && x <= 25 && y >= 5 && y <= 8)
-                    || (x >= 7 && x <= 10 && y >= 8 && y <= 23)
-                    || (x >= 7 && x <= 25 && y >= 23 && y <= 26);
-
-                let is_bolt = (x >= 17 && x <= 21 && y >= 8 && y <= 11)
-                    || (x >= 15 && x <= 19 && y >= 11 && y <= 14)
-                    || (x >= 13 && x <= 21 && y >= 14 && y <= 16)
-                    || (x >= 15 && x <= 19 && y >= 16 && y <= 19)
-                    || (x >= 13 && x <= 17 && y >= 19 && y <= 23);
-
-                if is_c || is_bolt {
-                    rgba[idx] = accent.0;
-                    rgba[idx + 1] = accent.1;
-                    rgba[idx + 2] = accent.2;
-                    rgba[idx + 3] = 255;
-                } else {
-                    rgba[idx] = bg.0;
-                    rgba[idx + 1] = bg.1;
-                    rgba[idx + 2] = bg.2;
-                    rgba[idx + 3] = 255;
-                }
-            } else if dist < 0.98 {
-                let alpha = ((0.98 - dist) / 0.08 * 255.0) as u8;
-                rgba[idx] = bg.0;
-                rgba[idx + 1] = bg.1;
-                rgba[idx + 2] = bg.2;
-                rgba[idx + 3] = alpha;
-            }
-        }
-    }
-
-    tray_icon::Icon::from_rgba(rgba, size, size).expect("Failed to create tray icon")
+    let icon_bytes = include_bytes!("../assets/icon-32.png");
+    let image = image::load_from_memory(icon_bytes)
+        .expect("Failed to load icon")
+        .into_rgba8();
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+    tray_icon::Icon::from_rgba(rgba, width, height).expect("Failed to create tray icon")
 }
 
 use chrono::Timelike;
@@ -289,3 +290,29 @@ fn log(msg: &str) {
         .format("%H:%M:%S").to_string();
     writeln!(file, "[{}] {}", time, msg).unwrap();
 }
+
+#[cfg(target_os = "windows")]
+fn update_startup_registry(enable: bool) {
+    use winreg::RegKey;
+    use winreg::enums::*;
+    
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(run) = hkcu.open_subkey_with_flags(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        KEY_SET_VALUE
+    ) {
+        let exe_path = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+            
+        if enable {
+            let _ = run.set_value("Craftr", &exe_path);
+        } else {
+            let _ = run.delete_value("Craftr");
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn update_startup_registry(_enable: bool) {}

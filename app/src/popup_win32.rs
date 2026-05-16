@@ -14,9 +14,14 @@ use std::ptr::null_mut;
 use chrono::Local;
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
+use std::sync::{Arc, Mutex};
+
+struct PopupState {
+    pub hotkeys_state: Arc<Mutex<(String, String)>>,
+}
 
 #[cfg(target_os = "windows")]
-pub fn show_popup() {
+pub fn show_popup(hotkeys_state: Arc<Mutex<(String, String)>>) {
     unsafe {
         let class_name = to_wstring("CraftrPopupClass");
         let h_inst = GetModuleHandleW(null_mut());
@@ -55,6 +60,11 @@ pub fn show_popup() {
         if hwnd.is_null() {
             return;
         }
+
+        let state = Box::into_raw(Box::new(PopupState {
+            hotkeys_state,
+        }));
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, state as isize);
 
         ShowWindow(hwnd, SW_SHOW);
         SetForegroundWindow(hwnd);
@@ -146,6 +156,21 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam
             }
             DeleteObject(normal_font as _);
 
+            // Draw Change Hotkeys Button
+            let mut hk_btn_rect = RECT { left: 20, top: 170, right: 300, bottom: 210 };
+            let hk_btn_brush = CreateSolidBrush(RGB(40, 40, 40));
+            FillRect(hdc, &mut hk_btn_rect, hk_btn_brush);
+            DeleteObject(hk_btn_brush as _);
+
+            SetTextColor(hdc, RGB(255, 255, 255));
+            let button_font = CreateFontW(
+                15, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, to_wstring("Segoe UI").as_ptr(),
+            );
+            SelectObject(hdc, button_font as _);
+            DrawTextW(hdc, to_wstring("⌨️ Change Hotkeys →").as_ptr(), -1, &mut hk_btn_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            DeleteObject(button_font as _);
+
             // Draw Upgrade Button
             if !cfg.is_pro {
                 let mut btn_rect = RECT { left: 20, top: 220, right: 300, bottom: 260 };
@@ -163,6 +188,7 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam
                 DeleteObject(bold_font as _);
             }
 
+
             EndPaint(hwnd, &ps);
             0
         }
@@ -171,17 +197,34 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam
             let y = ((lparam >> 16) & 0xFFFF) as i32;
             let cfg = crate::config::load_config();
             
-            // Check if clicked inside upgrade button
-            if !cfg.is_pro && x >= 20 && x <= 300 && y >= 220 && y <= 260 {
-                let _ = opener::open("https://craftr.app/upgrade");
+            let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut PopupState;
+            if state_ptr.is_null() { return 0; }
+            let state = &mut *state_ptr;
+
+            // Check if clicked inside Hotkeys button (y: 170-210)
+            if x >= 20 && x <= 300 && y >= 170 && y <= 210 {
+                let hs_clone = state.hotkeys_state.clone();
+                std::thread::spawn(move || {
+                    crate::settings_win32::show_settings_window(hs_clone);
+                });
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
+            // Check if clicked inside upgrade button (y: 220-260)
+            else if !cfg.is_pro && x >= 20 && x <= 300 && y >= 220 && y <= 260 {
+                let _ = opener::open("https://getcraftr.vercel.app/pricing");
                 PostMessageW(hwnd, WM_CLOSE, 0, 0);
             }
             0
         }
         WM_DESTROY => {
+            let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut PopupState;
+            if !state_ptr.is_null() {
+                unsafe { let _ = Box::from_raw(state_ptr); }
+            }
             PostQuitMessage(0);
             0
         }
+
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
 }

@@ -16,17 +16,32 @@ pub struct Config {
     #[serde(default)]
     pub is_pro: bool,
     pub last_validation_date: Option<String>,
+    #[serde(default = "default_enhance")]
+    pub enhance_hotkey: String,
+    #[serde(default = "default_compress")]
+    pub compress_hotkey: String,
+    #[serde(default = "default_true")]
+    pub launch_at_startup: bool,
 }
+
+fn default_true() -> bool { true }
+fn default_enhance() -> String { "ctrl+e".to_string() }
+fn default_compress() -> String { "ctrl+shift+e".to_string() }
+
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             requests_today: 0,
-            last_request_date: Local::now().format("%Y-%m-%d").to_string(),
+            last_request_date: chrono::Local::now().date_naive().to_string(),
             license_key: None,
             is_pro: false,
             last_validation_date: None,
+            enhance_hotkey: default_enhance(),
+            compress_hotkey: default_compress(),
+            launch_at_startup: true,
         }
+
     }
 }
 
@@ -64,15 +79,20 @@ pub fn save_config(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
-pub fn check_daily_limit() -> Result<bool, String> {
+pub fn enforce_daily_reset() {
     let mut config = load_config();
-    let today = Local::now().format("%Y-%m-%d").to_string();
+    let today = chrono::Local::now().date_naive().to_string();
 
     if config.last_request_date != today {
         config.last_request_date = today;
         config.requests_today = 0;
-        save_config(&config).map_err(|e| format!("Failed to save daily reset: {}", e))?;
+        let _ = save_config(&config);
     }
+}
+
+pub fn check_daily_limit() -> Result<bool, String> {
+    enforce_daily_reset();
+    let config = load_config();
 
     if config.is_pro {
         return Ok(true);

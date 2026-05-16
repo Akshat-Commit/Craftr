@@ -5,3 +5,4 @@ backend/__pycache__/
 **/.env
 **/.env.local
 **/.env.key
+icon-gen/
