@@ -2,7 +2,7 @@
 #[cfg(target_os = "windows")]
 use winapi::shared::minwindef::{LPARAM, LRESULT, UINT, WPARAM, HINSTANCE};
 #[cfg(target_os = "windows")]
-use winapi::shared::windef::{HBRUSH, HDC, HFONT, HWND, RECT};
+use winapi::shared::windef::{HBRUSH, HDC, HFONT, HWND, RECT, HICON};
 #[cfg(target_os = "windows")]
 use winapi::um::libloaderapi::GetModuleHandleW;
 #[cfg(target_os = "windows")]
@@ -99,17 +99,32 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam
             FillRect(hdc, &rect, bg_brush);
             DeleteObject(bg_brush as _);
 
-            // Draw header "⚡ Craftr"
+            // Draw header with icon and "Craftr" text
             SetBkMode(hdc, TRANSPARENT as i32);
+            
+            let hicon = LoadImageW(
+                GetModuleHandleW(null_mut()),
+                1 as *const u16,
+                IMAGE_ICON,
+                24,
+                24,
+                LR_DEFAULTCOLOR,
+            ) as HICON;
+            if !hicon.is_null() {
+                DrawIconEx(hdc, 20, 20, hicon, 24, 24, 0, null_mut(), 3);
+                DestroyIcon(hicon);
+            }
+
             SetTextColor(hdc, RGB(170, 255, 0));
             let header_font = CreateFontW(
                 24, 0, 0, 0, FW_BOLD, 0, 0, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, to_wstring("Segoe UI").as_ptr(),
             );
             SelectObject(hdc, header_font as _);
-            let mut header_rect = RECT { left: 20, top: 20, right: 300, bottom: 50 };
-            DrawTextW(hdc, to_wstring("⚡ Craftr").as_ptr(), -1, &mut header_rect, DT_LEFT | DT_SINGLELINE);
+            let mut header_rect = RECT { left: 52, top: 20, right: 300, bottom: 50 };
+            DrawTextW(hdc, to_wstring("Craftr").as_ptr(), -1, &mut header_rect, DT_LEFT | DT_SINGLELINE);
             DeleteObject(header_font as _);
+
 
             let cfg = crate::config::load_config();
             
